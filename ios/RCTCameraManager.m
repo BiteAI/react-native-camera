@@ -34,7 +34,7 @@ RCT_EXPORT_MODULE();
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.session];
     self.previewLayer.needsDisplayOnBoundsChange = YES;
   #endif
-  
+
   if(!self.camera){
     self.camera = [[RCTCamera alloc] initWithManager:self bridge:self.bridge];
   }
@@ -82,7 +82,7 @@ RCT_EXPORT_MODULE();
                @"low": @(RCTCameraCaptureSessionPresetLow),
                @"AVCaptureSessionPresetLow": @(RCTCameraCaptureSessionPresetLow),
                @"medium": @(RCTCameraCaptureSessionPresetMedium),
-               @"AVCaptureSessionPresetMedium": @(RCTCameraCaptureSessionPresetMedium),
+               @"AVCaptureSessionPreset640x480": @(RCTCameraCaptureSessionPresetMedium),
                @"high": @(RCTCameraCaptureSessionPresetHigh),
                @"AVCaptureSessionPresetHigh": @(RCTCameraCaptureSessionPresetHigh),
                @"photo": @(RCTCameraCaptureSessionPresetPhoto),
@@ -128,7 +128,7 @@ RCT_CUSTOM_VIEW_PROPERTY(captureQuality, NSInteger, RCTCamera) {
       qualityString = AVCaptureSessionPresetHigh;
       break;
     case RCTCameraCaptureSessionPresetMedium:
-      qualityString = AVCaptureSessionPresetMedium;
+      qualityString = AVCaptureSessionPreset640x480;
       break;
     case RCTCameraCaptureSessionPresetLow:
       qualityString = AVCaptureSessionPresetLow;

@@ -558,6 +558,8 @@ RCT_EXPORT_METHOD(hasFlash:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRej
         if (imageDataSampleBuffer) {
           NSData *imageData = [AVCaptureStillImageOutput jpegStillImageNSDataRepresentation:imageDataSampleBuffer];
 
+          /* COMMENTED(kito): we don't need to do any of this.
+
           // Create image source
           CGImageSourceRef source = CGImageSourceCreateWithData((CFDataRef)imageData, NULL);
           //get all the metadata in the image
@@ -606,9 +608,11 @@ RCT_EXPORT_METHOD(hasFlash:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRej
           CGImageDestinationFinalize(destination);
           CFRelease(destination);
 
-          [self saveImage:rotatedImageData target:target metadata:imageMetadata resolve:resolve reject:reject];
+          END COMMENTED(kito) */
 
-          CGImageRelease(rotatedCGImage);
+          [self saveImage:imageData target:target metadata:nil resolve:resolve reject:reject];
+
+          // CGImageRelease(rotatedCGImage);
         }
         else {
           reject(RCTErrorUnspecified, nil, RCTErrorWithMessage(error.description));

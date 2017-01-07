@@ -21,9 +21,7 @@
 @implementation RCTCamera
 {
   BOOL _multipleTouches;
-  BOOL _onFocusChanged;
   BOOL _defaultOnFocusComponent;
-  BOOL _onZoomChanged;
   BOOL _previousIdleTimerDisabled;
 }
 
@@ -41,24 +39,10 @@
   }
 }
 
-- (void)setOnFocusChanged:(BOOL)enabled
-{
-  if (_onFocusChanged != enabled) {
-    _onFocusChanged = enabled;
-  }
-}
-
 - (void)setDefaultOnFocusComponent:(BOOL)enabled
 {
   if (_defaultOnFocusComponent != enabled) {
     _defaultOnFocusComponent = enabled;
-  }
-}
-
-- (void)setOnZoomChanged:(BOOL)enabled
-{
-  if (_onZoomChanged != enabled) {
-    _onZoomChanged = enabled;
   }
 }
 
@@ -73,9 +57,7 @@
     [self.manager initializeCaptureSessionInput:AVMediaTypeVideo];
     [self.manager startSession];
     _multipleTouches = NO;
-    _onFocusChanged = NO;
     _defaultOnFocusComponent = YES;
-    _onZoomChanged = NO;
     _previousIdleTimerDisabled = [UIApplication sharedApplication].idleTimerDisabled;
   }
   return self;
@@ -126,7 +108,7 @@
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (!_onFocusChanged) return;
+    if (!self.onFocusChanged) return;
 
     BOOL allTouchesEnded = ([touches count] == [[event touchesForView:self] count]);
 
@@ -148,7 +130,7 @@
             @"y": [NSNumber numberWithDouble:touchPoint.y]
           }
         };
-        [self.bridge.eventDispatcher sendInputEventWithName:@"focusChanged" body:event];
+        self.onFocusChanged(event);
 
         // Show animated rectangle on the touched area
         if (_defaultOnFocusComponent) {
@@ -172,7 +154,7 @@
 
 
 -(void) handlePinchToZoomRecognizer:(UIPinchGestureRecognizer*)pinchRecognizer {
-    if (!_onZoomChanged) return;
+    if (!self.onZoomChanged) return;
 
     if (pinchRecognizer.state == UIGestureRecognizerStateChanged) {
         [self.manager zoom:pinchRecognizer.velocity reactTag:self.reactTag];

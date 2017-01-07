@@ -123,8 +123,8 @@ RCT_EXPORT_MODULE();
 
 RCT_EXPORT_VIEW_PROPERTY(orientation, NSInteger);
 RCT_EXPORT_VIEW_PROPERTY(defaultOnFocusComponent, BOOL);
-RCT_EXPORT_VIEW_PROPERTY(onFocusChanged, BOOL);
-RCT_EXPORT_VIEW_PROPERTY(onZoomChanged, BOOL);
+RCT_EXPORT_VIEW_PROPERTY(onFocusChanged, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onZoomChanged, RCTDirectEventBlock);
 
 RCT_CUSTOM_VIEW_PROPERTY(captureQuality, NSInteger, RCTCamera) {
   NSInteger quality = [RCTConvert NSInteger:json];
@@ -291,14 +291,6 @@ RCT_CUSTOM_VIEW_PROPERTY(captureAudio, BOOL, RCTCamera) {
     RCTLog(@"capturing audio");
     [self initializeCaptureSessionInput:AVMediaTypeAudio];
   }
-}
-
-- (NSArray *)customDirectEventTypes
-{
-    return @[
-      @"focusChanged",
-      @"zoomChanged",
-    ];
 }
 
 - (id)init {
@@ -995,7 +987,7 @@ didFinishRecordingToOutputFileAtURL:(NSURL *)outputFileURL
           @"velocity": [NSNumber numberWithDouble:velocity]
         };
 
-        [self.bridge.eventDispatcher sendInputEventWithName:@"zoomChanged" body:event];
+        self.camera.onZoomChanged(event);
 
         device.videoZoomFactor = zoomFactor;
         [device unlockForConfiguration];

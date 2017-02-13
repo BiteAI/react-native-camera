@@ -556,13 +556,38 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
                 break;
         }
 
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(data);
-        Bitmap decodedBitmap = BitmapFactory.decodeStream(inputStream);
+        // BiteAI: Modified
+        // Quick fix to avoid OOMs (https://github.com/lwansbrough/react-native-camera/issues/590),
+        // use the smallest bitmap that is at least 1024px on each edge.
+        Bitmap decodedBitmap = loadBitmap(data, 1024);
+
         final Bitmap transformedBitmap = Bitmap.createBitmap(
                 decodedBitmap, 0, 0, decodedBitmap.getWidth(), decodedBitmap.getHeight(), bitmapMatrix, false
         );
 
-        return saveImage(inputStream, transformedBitmap);
+        return compress(transformedBitmap, 95);
+    }
+
+    /**
+     * BiteAI: Added
+     * Decodes the given Bitmap, downsampling if necessary such that the minimum edge is at
+     * at least the given length
+     */
+    private Bitmap loadBitmap(byte[] data, int minEdgeLength) {
+        // Decode size and compute sample size
+        // (see http://developer.android.com/training/displaying-bitmaps/load-bitmap.html)
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(data, 0, data.length, opts);
+        int sampleSize = 1;
+        while (opts.outWidth / (2 * sampleSize) >= minEdgeLength &&
+            opts.outHeight / (2 * sampleSize) >= minEdgeLength) {
+            sampleSize *= 2;
+        }
+        // Now decode, using the computed sample size:
+        opts = new BitmapFactory.Options();
+        opts.inSampleSize = sampleSize;
+        return BitmapFactory.decodeByteArray(data, 0, data.length, opts);
     }
 
     private byte[] fixOrientation(byte[] data) {

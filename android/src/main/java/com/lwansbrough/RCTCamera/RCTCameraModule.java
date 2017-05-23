@@ -6,23 +6,16 @@
 package com.lwansbrough.RCTCamera;
 
 import android.content.ContentValues;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Matrix;
 import android.hardware.Camera;
 import android.media.*;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
 import android.view.Surface;
 
-import com.drew.imaging.ImageMetadataReader;
-import com.drew.imaging.ImageProcessingException;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.MetadataException;
-import com.drew.metadata.exif.ExifIFD0Directory;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -679,88 +672,21 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
             RCTCamera.getInstance().setCaptureQuality(options.getInt("type"), options.getString("quality"));
         }
 
-        final Boolean shouldMirror = options.hasKey("mirrorImage") && options.getBoolean("mirrorImage");
-
         RCTCamera.getInstance().adjustCameraRotationToDeviceOrientation(options.getInt("type"), deviceOrientation);
         camera.setPreviewCallback(null);
 
         Camera.PictureCallback captureCallback = new Camera.PictureCallback() {
             @Override
-            public void onPictureTaken(byte[] data, Camera camera) {
-
-                if (shouldMirror) {
-                    data = mirrorImage(data);
-                    if (data == null) {
-                        promise.reject("Error mirroring image");
-                    }
-                }
-
-                data = fixOrientation(data);
-
+            public void onPictureTaken(final byte[] data, Camera camera) {
                 camera.stopPreview();
                 camera.startPreview();
-                WritableMap response = new WritableNativeMap();
-                switch (options.getInt("target")) {
-                    case RCT_CAMERA_CAPTURE_TARGET_MEMORY:
-                        String encoded = Base64.encodeToString(data, Base64.DEFAULT);
-                        response.putString("data", encoded);
-                        promise.resolve(response);
-                        break;
-                    case RCT_CAMERA_CAPTURE_TARGET_CAMERA_ROLL: {
-                        File cameraRollFile = getOutputCameraRollFile(MEDIA_TYPE_IMAGE);
-                        if (cameraRollFile == null) {
-                            promise.reject("Error creating media file.");
-                            return;
-                        }
 
-                        Throwable error = writeDataToFile(data, cameraRollFile);
-                        if (error != null) {
-                            promise.reject(error);
-                            return;
-                        }
-
-                        rewriteOrientation(cameraRollFile.getAbsolutePath());
-                        addToMediaStore(cameraRollFile.getAbsolutePath());
-                        response.putString("path", Uri.fromFile(cameraRollFile).toString());
-                        promise.resolve(response);
-                        break;
+                AsyncTask.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        processImage(new MutableImage(data), options, promise);
                     }
-                    case RCT_CAMERA_CAPTURE_TARGET_DISK: {
-                        File pictureFile = getOutputMediaFile(MEDIA_TYPE_IMAGE);
-                        if (pictureFile == null) {
-                            promise.reject("Error creating media file.");
-                            return;
-                        }
-
-                        Throwable error = writeDataToFile(data, pictureFile);
-                        if (error != null) {
-                            promise.reject(error);
-                            return;
-                        }
-
-                        rewriteOrientation(pictureFile.getAbsolutePath());
-                        response.putString("path", Uri.fromFile(pictureFile).toString());
-                        promise.resolve(response);
-                        break;
-                    }
-                    case RCT_CAMERA_CAPTURE_TARGET_TEMP: {
-                        File tempFile = getTempMediaFile(MEDIA_TYPE_IMAGE);
-                        if (tempFile == null) {
-                            promise.reject("Error creating media file.");
-                            return;
-                        }
-
-                        Throwable error = writeDataToFile(data, tempFile);
-                        if (error != null) {
-                            promise.reject(error);
-                        }
-
-                        rewriteOrientation(tempFile.getAbsolutePath());
-                        response.putString("path", Uri.fromFile(tempFile).toString());
-                        promise.resolve(response);
-                        break;
-                    }
-                }
+                });
 
                 mSafeToCapture = true;
             }
@@ -773,6 +699,100 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
           } catch(RuntimeException ex) {
               Log.e(TAG, "Couldn't capture photo.", ex);
           }
+        }
+    }
+
+    /**
+     * synchronized in order to prevent the user crashing the app by taking many photos and them all being processed
+     * concurrently which would blow the memory (esp on smaller devices), and slow things down.
+     */
+    private synchronized void processImage(MutableImage mutableImage, ReadableMap options, Promise promise) {
+        boolean shouldFixOrientation = options.hasKey("fixOrientation") && options.getBoolean("fixOrientation");
+        if(shouldFixOrientation) {
+            try {
+                mutableImage.fixOrientation();
+            } catch (MutableImage.ImageMutationFailedException e) {
+                promise.reject("Error fixing orientation image", e);
+            }
+        }
+
+        boolean shouldMirror = options.hasKey("mirrorImage") && options.getBoolean("mirrorImage");
+        if (shouldMirror) {
+            try {
+                mutableImage.mirrorImage();
+            } catch (MutableImage.ImageMutationFailedException e) {
+                promise.reject("Error mirroring image", e);
+            }
+        }
+
+        int jpegQualityPercent = 80;
+        if(options.hasKey("jpegQuality")) {
+            jpegQualityPercent = options.getInt("jpegQuality");
+        }
+
+        switch (options.getInt("target")) {
+            case RCT_CAMERA_CAPTURE_TARGET_MEMORY:
+                String encoded = mutableImage.toBase64(jpegQualityPercent);
+                WritableMap response = new WritableNativeMap();
+                response.putString("data", encoded);
+                promise.resolve(response);
+                break;
+            case RCT_CAMERA_CAPTURE_TARGET_CAMERA_ROLL: {
+                File cameraRollFile = getOutputCameraRollFile(MEDIA_TYPE_IMAGE);
+                if (cameraRollFile == null) {
+                    promise.reject("Error creating media file.");
+                    return;
+                }
+
+                try {
+                    mutableImage.writeDataToFile(cameraRollFile, options, jpegQualityPercent);
+                } catch (IOException e) {
+                    promise.reject("failed to save image file", e);
+                    return;
+                }
+
+                addToMediaStore(cameraRollFile.getAbsolutePath());
+
+                resolve(cameraRollFile, promise);
+
+                break;
+            }
+            case RCT_CAMERA_CAPTURE_TARGET_DISK: {
+                File pictureFile = getOutputMediaFile(MEDIA_TYPE_IMAGE);
+                if (pictureFile == null) {
+                    promise.reject("Error creating media file.");
+                    return;
+                }
+
+                try {
+                    mutableImage.writeDataToFile(pictureFile, options, 85);
+                } catch (IOException e) {
+                    promise.reject("failed to save image file", e);
+                    return;
+                }
+
+                resolve(pictureFile, promise);
+
+                break;
+            }
+            case RCT_CAMERA_CAPTURE_TARGET_TEMP: {
+                File tempFile = getTempMediaFile(MEDIA_TYPE_IMAGE);
+                if (tempFile == null) {
+                    promise.reject("Error creating media file.");
+                    return;
+                }
+
+                try {
+                    mutableImage.writeDataToFile(tempFile, options, 85);
+                } catch (IOException e) {
+                    promise.reject("failed to save image file", e);
+                    return;
+                }
+
+                resolve(tempFile, promise);
+
+                break;
+            }
         }
     }
 
@@ -795,20 +815,6 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
         }
         List<String> flashModes = camera.getParameters().getSupportedFlashModes();
         promise.resolve(null != flashModes && !flashModes.isEmpty());
-    }
-
-    private Throwable writeDataToFile(byte[] data, File file) {
-        try {
-            FileOutputStream fos = new FileOutputStream(file);
-            fos.write(data);
-            fos.close();
-        } catch (FileNotFoundException e) {
-            return e;
-        } catch (IOException e) {
-            return e;
-        }
-
-        return null;
     }
 
     private File getOutputMediaFile(int type) {
@@ -885,7 +891,6 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
         MediaScannerConnection.scanFile(_reactContext, new String[] { path }, null, null);
     }
 
-
     /**
      * LifecycleEventListener overrides
      */
@@ -906,4 +911,28 @@ public class RCTCameraModule extends ReactContextBaseJavaModule
     public void onHostDestroy() {
         // ... do nothing
     }
+
+    private void resolve(final File imageFile, final Promise promise) {
+        final WritableMap response = new WritableNativeMap();
+        response.putString("path", Uri.fromFile(imageFile).toString());
+
+        // borrowed from react-native CameraRollManager, it finds and returns the 'internal'
+        // representation of the image uri that was just saved.
+        // e.g. content://media/external/images/media/123
+        MediaScannerConnection.scanFile(
+                _reactContext,
+                new String[]{imageFile.getAbsolutePath()},
+                null,
+                new MediaScannerConnection.OnScanCompletedListener() {
+                    @Override
+                    public void onScanCompleted(String path, Uri uri) {
+                        if (uri != null) {
+                            response.putString("mediaUri", uri.toString());
+                        }
+
+                        promise.resolve(response);
+                    }
+                });
+    }
+
 }

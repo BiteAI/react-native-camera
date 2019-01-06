@@ -92,13 +92,17 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
                 int orientation = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION,
                         ExifInterface.ORIENTATION_UNDEFINED);
 
-                // Rotate the bitmap to the proper orientation if needed
-                if (mOptions.hasKey("fixOrientation") && mOptions.getBoolean("fixOrientation") && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
-                    mBitmap = rotateBitmap(mBitmap, getImageRotation(orientation));
+                if (mOptions.hasKey("squareSize")) {
+                    mBitmap = squareBitmap(mBitmap, mOptions.getInt("squareSize"));
                 }
 
                 if (mOptions.hasKey("width")) {
                     mBitmap = resizeBitmap(mBitmap, mOptions.getInt("width"));
+                }
+
+                // Rotate the bitmap to the proper orientation if needed
+                if (mOptions.hasKey("fixOrientation") && mOptions.getBoolean("fixOrientation") && orientation != ExifInterface.ORIENTATION_UNDEFINED) {
+                        mBitmap = rotateBitmap(mBitmap, getImageRotation(orientation));
                 }
 
                 if (mOptions.hasKey("mirrorImage") && mOptions.getBoolean("mirrorImage")) {
@@ -173,6 +177,21 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
         float scaleRatio = (float) newWidth / (float) width;
 
         return Bitmap.createScaledBitmap(bm, newWidth, (int) (height * scaleRatio), true);
+    }
+
+    private Bitmap squareBitmap(Bitmap bitmap, int size) {
+        float aspect = (float)bitmap.getWidth() / bitmap.getHeight();
+        Bitmap squareBitmap;
+        if (aspect > 1) {
+          Bitmap scaled = Bitmap.createScaledBitmap(bitmap, Math.round(size * aspect), size, true);
+          float excessX = (aspect - 1) * size;
+          squareBitmap = Bitmap.createBitmap(scaled, Math.round(excessX * 0.5f), 0, size, size);
+        } else {
+          Bitmap scaled = Bitmap.createScaledBitmap(bitmap, size, Math.round(size / aspect), true);
+          float excessY = (1.0f / aspect - 1) * size;
+          squareBitmap = Bitmap.createBitmap(scaled, 0, Math.round(excessY * 0.5f), size, size);
+        }
+        return squareBitmap;
     }
 
     private Bitmap flipHorizontally(Bitmap source) {

@@ -38,6 +38,7 @@ type PictureOptions = {
   base64?: boolean,
   mirrorImage?: boolean,
   exif?: boolean,
+  squareSize?: number,
   width?: number,
   fixOrientation?: boolean,
   forceUpOrientation?: boolean,

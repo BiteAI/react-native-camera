@@ -81,6 +81,27 @@
     return [UIImage imageWithCGImage:[newImage CGImage]  scale:1.0 orientation:(newImage.imageOrientation)];
 }
 
++ (UIImage *) squareImage:(UIImage*)image size:(NSInteger)size {
+  CGFloat aspect = image.size.width / image.size.height;
+  CGFloat x, y, w, h;
+  if (aspect >= 1) {
+    w = size * aspect;
+    h = size;
+    x = -0.5 * (w - size);
+    y = 0;
+  } else {
+    w = size;
+    h = size / aspect;
+    x = 0;
+    y = -0.5 * (h - size);
+  }
+  UIGraphicsBeginImageContext(CGSizeMake(size, size));
+  [image drawInRect:CGRectMake(x, y, w, h)];
+  UIImage *resultImage = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  return [UIImage imageWithCGImage:[resultImage CGImage] scale:1.0 orientation:(resultImage.imageOrientation)];
+}
+
 + (UIImage *)forceUpOrientation:(UIImage *)image
 {
     if (image.imageOrientation != UIImageOrientationUp) {

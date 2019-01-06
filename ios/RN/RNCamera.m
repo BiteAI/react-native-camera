@@ -424,6 +424,10 @@ static NSDictionary *defaultFaceDetectorOptions = nil;
                 takenImage = [RNImageUtils forceUpOrientation:takenImage];
             }
 
+            if ([options[@"squareSize"] integerValue]) {
+                takenImage = [RNImageUtils squareImage:takenImage size:[options[@"squareSize"] integerValue]];
+            }
+
             if ([options[@"width"] integerValue]) {
                 takenImage = [RNImageUtils scaleImage:takenImage toWidth:[options[@"width"] integerValue]];
             }

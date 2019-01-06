@@ -17,6 +17,7 @@
 + (UIImage *)forceUpOrientation:(UIImage *)image;
 + (NSString *)writeImage:(NSData *)image toPath:(NSString *)path;
 + (UIImage *) scaleImage:(UIImage*)image toWidth:(NSInteger)width;
++ (UIImage *) squareImage:(UIImage*)image size:(NSInteger)size;
 + (void)updatePhotoMetadata:(CMSampleBufferRef)imageSampleBuffer withAdditionalData:(NSDictionary *)additionalData inResponse:(NSMutableDictionary *)response;
 
 @end

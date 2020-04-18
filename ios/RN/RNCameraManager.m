@@ -13,11 +13,19 @@
 
 RCT_EXPORT_MODULE(RNCameraManager);
 RCT_EXPORT_VIEW_PROPERTY(onCameraReady, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onAudioInterrupted, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onAudioConnected, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onMountError, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onBarCodeRead, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onFacesDetected, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onGoogleVisionBarcodesDetected, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onPictureTaken, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onPictureSaved, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onRecordingStart, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onRecordingEnd, RCTDirectEventBlock);
 RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(onSubjectAreaChanged, RCTDirectEventBlock);
+RCT_EXPORT_VIEW_PROPERTY(videoStabilizationMode, NSInteger);
 
 + (BOOL)requiresMainQueueSetup
 {
@@ -68,13 +76,16 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
              @"VideoCodec": [[self class] validCodecTypes],
              @"BarCodeType" : [[self class] validBarCodeTypes],
              @"FaceDetection" : [[self class] faceDetectorConstants],
-             @"VideoStabilization": [[self class] validVideoStabilizationModes]
+             @"VideoStabilization": [[self class] validVideoStabilizationModes],
+             @"GoogleVisionBarcodeDetection": @{
+                 @"BarcodeType": [[self class] barcodeDetectorConstants],
+             }
              };
 }
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"onCameraReady", @"onMountError", @"onBarCodeRead", @"onFacesDetected", @"onPictureSaved", @"onTextRecognized"];
+    return @[@"onCameraReady", @"onAudioInterrupted", @"onAudioConnected", @"onMountError", @"onBarCodeRead", @"onFacesDetected", @"onPictureTaken", @"onPictureSaved", @"onRecordingStart", @"onRecordingEnd", @"onTextRecognized", @"onGoogleVisionBarcodesDetected", @"onSubjectAreaChanged"];
 }
 
 + (NSDictionary *)validCodecTypes
@@ -142,12 +153,17 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
 
 + (NSDictionary *)faceDetectorConstants
 {
-#if __has_include(<GoogleMobileVision/GoogleMobileVision.h>)
-#if __has_include("RNFaceDetectorManager.h")
-    return [RNFaceDetectorManager constants];
+#if __has_include(<FirebaseMLVision/FirebaseMLVision.h>)
+    return [FaceDetectorManagerMlkit constants];
 #else
-    return [RNFaceDetectorManagerStub constants];
+    return [NSDictionary new];
 #endif
+}
+
++ (NSDictionary *)barcodeDetectorConstants
+{
+#if __has_include(<FirebaseMLVision/FirebaseMLVision.h>)
+    return [BarcodeDetectorManagerMlkit constants];
 #else
     return [NSDictionary new];
 #endif
@@ -155,8 +171,22 @@ RCT_EXPORT_VIEW_PROPERTY(onTextRecognized, RCTDirectEventBlock);
 
 RCT_CUSTOM_VIEW_PROPERTY(type, NSInteger, RNCamera)
 {
-    if (view.presetCamera != [RCTConvert NSInteger:json]) {
-        [view setPresetCamera:[RCTConvert NSInteger:json]];
+    NSInteger newType = [RCTConvert NSInteger:json];
+    if (view.presetCamera != newType) {
+        [view setPresetCamera:newType];
+        [view updateType];
+    }
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(cameraId, NSString, RNCamera)
+{
+    NSString *newId = [RCTConvert NSString:json];
+
+    // also compare pointers so we check for nulls
+    if (view.cameraId != newId && ![view.cameraId isEqualToString:newId]) {
+        [view setCameraId:newId];
+        // using same call as setting the type here since they
+        // both require the same updates
         [view updateType];
     }
 }
@@ -191,10 +221,22 @@ RCT_CUSTOM_VIEW_PROPERTY(zoom, NSNumber, RNCamera)
     [view updateZoom];
 }
 
+RCT_CUSTOM_VIEW_PROPERTY(maxZoom, NSNumber, RNCamera)
+{
+    [view setMaxZoom:[RCTConvert CGFloat:json]];
+    [view updateZoom];
+}
+
 RCT_CUSTOM_VIEW_PROPERTY(whiteBalance, NSInteger, RNCamera)
 {
     [view setWhiteBalance:[RCTConvert NSInteger:json]];
     [view updateWhiteBalance];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(exposure, NSNumber, RNCamera)
+{
+    [view setExposure:[RCTConvert float:json]];
+    [view updateExposure];
 }
 
 RCT_CUSTOM_VIEW_PROPERTY(pictureSize, NSString *, RNCamera)
@@ -206,8 +248,13 @@ RCT_CUSTOM_VIEW_PROPERTY(pictureSize, NSString *, RNCamera)
 
 RCT_CUSTOM_VIEW_PROPERTY(faceDetectorEnabled, BOOL, RNCamera)
 {
-    view.isDetectingFaces = [RCTConvert BOOL:json];
-    [view updateFaceDetecting:json];
+    view.canDetectFaces = [RCTConvert BOOL:json];
+    [view setupOrDisableFaceDetector];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(trackingEnabled, BOOL, RNCamera)
+{
+    [view updateTrackingEnabled:json];
 }
 
 RCT_CUSTOM_VIEW_PROPERTY(faceDetectionMode, NSInteger, RNCamera)
@@ -227,7 +274,7 @@ RCT_CUSTOM_VIEW_PROPERTY(faceDetectionClassifications, NSString, RNCamera)
 
 RCT_CUSTOM_VIEW_PROPERTY(barCodeScannerEnabled, BOOL, RNCamera)
 {
-    
+
     view.isReadingBarCodes = [RCTConvert BOOL:json];
     [view setupOrDisableBarcodeScanner];
 }
@@ -237,11 +284,39 @@ RCT_CUSTOM_VIEW_PROPERTY(barCodeTypes, NSArray, RNCamera)
     [view setBarCodeTypes:[RCTConvert NSArray:json]];
 }
 
+RCT_CUSTOM_VIEW_PROPERTY(googleVisionBarcodeType, NSString, RNCamera)
+{
+    [view updateGoogleVisionBarcodeType:json];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(googleVisionBarcodeDetectorEnabled, BOOL, RNCamera)
+{
+    view.canDetectBarcodes = [RCTConvert BOOL:json];
+    [view setupOrDisableBarcodeDetector];
+}
+
 RCT_CUSTOM_VIEW_PROPERTY(textRecognizerEnabled, BOOL, RNCamera)
 {
-    
+
     view.canReadText = [RCTConvert BOOL:json];
     [view setupOrDisableTextDetector];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(captureAudio, BOOL, RNCamera)
+{
+    [view setCaptureAudio:[RCTConvert BOOL:json]];
+    [view updateCaptureAudio];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(keepAudioSession, BOOL, RNCamera)
+{
+    [view setKeepAudioSession:[RCTConvert BOOL:json]];
+}
+
+RCT_CUSTOM_VIEW_PROPERTY(rectOfInterest, CGRect, RNCamera)
+{
+    [view setRectOfInterest: [RCTConvert CGRect:json]];
+    [view updateRectOfInterest];
 }
 
 RCT_CUSTOM_VIEW_PROPERTY(defaultVideoQuality, NSInteger, RNCamera)
@@ -261,14 +336,27 @@ RCT_REMAP_METHOD(takePicture,
             RCTLogError(@"Invalid view returned from registry, expecting RNCamera, got: %@", view);
         } else {
 #if TARGET_IPHONE_SIMULATOR
+
             NSMutableDictionary *response = [[NSMutableDictionary alloc] init];
+
             float quality = [options[@"quality"] floatValue];
-            NSString *path = [RNFileSystem generatePathInDirectory:[[RNFileSystem cacheDirectoryPath] stringByAppendingPathComponent:@"Camera"] withExtension:@".jpg"];
+
+            NSString *path = nil;
+
+            if (options[@"path"]) {
+                path = options[@"path"];
+            }
+            else{
+                path = [RNFileSystem generatePathInDirectory:[[RNFileSystem cacheDirectoryPath] stringByAppendingPathComponent:@"Camera"] withExtension:@".jpg"];
+            }
             UIImage *generatedPhoto = [RNImageUtils generatePhotoOfSize:CGSizeMake(200, 200)];
             BOOL useFastMode = options[@"fastMode"] && [options[@"fastMode"] boolValue];
             if (useFastMode) {
                 resolve(nil);
             }
+
+            [view onPictureTaken:@{}];
+
             NSData *photoData = UIImageJPEGRepresentation(generatedPhoto, quality);
             if (![options[@"doNotSave"] boolValue]) {
                 response[@"uri"] = [RNImageUtils writeImage:photoData toPath:path];
@@ -355,7 +443,7 @@ RCT_REMAP_METHOD(stopRecording, reactTag:(nonnull NSNumber *)reactTag)
 RCT_EXPORT_METHOD(checkDeviceAuthorizationStatus:(RCTPromiseResolveBlock)resolve
                   reject:(__unused RCTPromiseRejectBlock)reject) {
     __block NSString *mediaType = AVMediaTypeVideo;
-    
+
     [AVCaptureDevice requestAccessForMediaType:mediaType completionHandler:^(BOOL granted) {
         if (!granted) {
             resolve(@(granted));
@@ -425,6 +513,103 @@ RCT_EXPORT_METHOD(isRecording:(nonnull NSNumber *)reactTag
                 resolve(@([view isRecording]));
             }
         }];
+}
+
+RCT_EXPORT_METHOD(getCameraIds:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+
+#if TARGET_IPHONE_SIMULATOR
+    resolve(@[]);
+    return;
+#endif
+
+    NSMutableArray *res = [NSMutableArray array];
+
+
+    // need to filter/search devices based on iOS version
+    // these warnings can be easily seen on XCode
+    if (@available(iOS 10.0, *)) {
+        NSArray *captureDeviceType;
+
+
+        if (@available(iOS 13.0, *)) {
+            captureDeviceType = @[
+                AVCaptureDeviceTypeBuiltInWideAngleCamera,
+                AVCaptureDeviceTypeBuiltInTelephotoCamera
+                #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
+                    ,AVCaptureDeviceTypeBuiltInUltraWideCamera
+                #endif
+            ];
+        }
+        else{
+            captureDeviceType = @[
+                AVCaptureDeviceTypeBuiltInWideAngleCamera,
+                AVCaptureDeviceTypeBuiltInTelephotoCamera
+            ];
+        }
+
+
+        AVCaptureDeviceDiscoverySession *captureDevice =
+        [AVCaptureDeviceDiscoverySession
+         discoverySessionWithDeviceTypes:captureDeviceType
+         mediaType:AVMediaTypeVideo
+         position:AVCaptureDevicePositionUnspecified];
+
+        for(AVCaptureDevice *camera in [captureDevice devices]){
+
+            // exclude virtual devices. We currently cannot use
+            // any virtual device feature like auto switching or
+            // depth of field detetion anyways.
+            #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
+                if (@available(iOS 13.0, *)) {
+                    if([camera isVirtualDevice]){
+                        continue;
+                    }
+                }
+            #endif
+
+
+            if([camera position] == AVCaptureDevicePositionFront) {
+                [res addObject: @{
+                    @"id": [camera uniqueID],
+                    @"type": @(RNCameraTypeFront),
+                    @"deviceType": [camera deviceType]
+                }];
+            }
+            else if([camera position] == AVCaptureDevicePositionBack){
+                [res addObject: @{
+                    @"id": [camera uniqueID],
+                    @"type": @(RNCameraTypeBack),
+                    @"deviceType": [camera deviceType]
+                }];
+            }
+
+        }
+
+    } else {
+        NSArray *devices = [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo];
+        for(AVCaptureDevice *camera in devices) {
+
+
+            if([camera position] == AVCaptureDevicePositionFront) {
+                [res addObject: @{
+                    @"id": [camera uniqueID],
+                    @"type": @(RNCameraTypeFront),
+                    @"deviceType": @""
+                }];
+            }
+            else if([camera position] == AVCaptureDevicePositionBack){
+                [res addObject: @{
+                    @"id": [camera uniqueID],
+                    @"type": @(RNCameraTypeBack),
+                    @"deviceType": @""
+                }];
+            }
+
+        }
+    }
+
+    resolve(res);
 }
 
 @end

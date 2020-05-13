@@ -292,6 +292,12 @@ Value: float from `0` to `1.0`, or `-1` (default) for auto.
 
 Sets the camera's exposure value.
 
+### `useNativeZoom`
+
+Boolean to turn on native pinch to zoom. Works with the `maxZoom` property on iOS.
+
+Warning: The Android Touch-Event-System causes childviews to catch the touch events. Therefore avoid using screenfilling touchables inside of the cameraview.
+
 ### `zoom`
 
 Value: float from `0` to `1.0`
@@ -424,6 +430,21 @@ Event will contain the following fields:
 ### `onRecordingEnd`
 
 Function to be called when native code stops recording video, but before all video processing takes place. This event will only fire after a successful video recording, and it will not fire if video recording fails (use the error returned from `recordAsync` instead).
+
+### `onTap`
+
+Function to be called when a touch within the camera view is recognized.
+The function is also called on the first touch of double tap.
+Event will contain the following fields:
+- `x`
+- `y`
+
+### `onDoubleTap`
+
+Function to be called when a double touch within the camera view is recognized.
+Event will contain the following fields:
+- `x`
+- `y`
 
 ### Bar Code Related props
 

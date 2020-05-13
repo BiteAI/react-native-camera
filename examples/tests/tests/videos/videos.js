@@ -2,29 +2,16 @@
  * @format
  * @flow strict-local
  */
+
 import * as React from 'react';
+import {Platform} from 'react-native';
 import {RNCamera} from 'react-native-camera';
 
-const waitFor = delay => new Promise(resolve => setTimeout(resolve, delay));
-
-export const videos = (tester, render) => {
-  const {describe, it, expect, createSpy, any} = tester;
-  const renderCamera = props =>
-    render({
-      Component: (
-        <RNCamera
-          type={RNCamera.Constants.Type.front}
-          style={{height: 100, width: 100}}
-          {...props}
-        />
-      ),
-      waitFor: 'onCameraReady',
-    });
-
+export const videos = ({describe, it, expect, createSpy, any}, render) => {
   describe('getSupportedRatiosAsync', () => {
     if (Platform.OS === 'android') {
       it('should resolve to an array of strings', async () => {
-        const camera = await renderCamera();
+        const camera = await render(<RNCamera />);
         const ratios = await camera.getSupportedRatiosAsync();
 
         expect(ratios).toBeInstanceOf(Array);
@@ -34,7 +21,7 @@ export const videos = (tester, render) => {
 
     if (Platform.OS === 'ios') {
       it('should throw an error', async () => {
-        const camera = await renderCamera();
+        const camera = await render(<RNCamera />);
         expect(async () => await camera.getSupportedRatiosAsync()).toThrowError(
           'Ratio is not supported on iOS',
         );
@@ -45,14 +32,14 @@ export const videos = (tester, render) => {
   describe('isRecording', () => {
     if (Platform.OS === 'android') {
       it('should throw an error', async () => {
-        const camera = await renderCamera();
+        const camera = await render(<RNCamera />);
         expect(() => camera.isRecording()).toThrowError();
       });
     }
 
     if (Platform.OS === 'ios') {
       it('should indicate recording status', async () => {
-        const camera = await renderCamera();
+        const camera = await render(<RNCamera />);
         expect(await camera.isRecording()).toBe(false);
         camera.recordAsync();
         expect(await camera.isRecording()).toBe(true);
@@ -62,25 +49,31 @@ export const videos = (tester, render) => {
   });
 
   describe('recordAsync', () => {
-    it('should call onRecording(Start|End) callbacks', async () => {
-      const onRecordingStart = createSpy('onRecordingStart');
-      const onRecordingEnd = createSpy('onRecordingEnd');
-      const camera = await renderCamera({
-        onRecordingStart,
-        onRecordingEnd,
-      });
+    it('should call onRecording(Start|End) callbacks', async done => {
+      const onRecordingStart = createSpy('onRecordingStart', () =>
+        camera.stopRecording(),
+      ).and.callThrough();
+      const onRecordingEnd = createSpy('onRecordingEnd', () => {
+        expect(onRecordingStart).toHaveBeenCalledTimes(1);
+        expect(onRecordingEnd).toHaveBeenCalledTimes(1);
 
-      setTimeout(() => camera.stopRecording(), 100);
-      await camera.recordAsync();
-      await waitFor(500);
+        done();
+      }).and.callThrough();
 
-      expect(onRecordingStart).toHaveBeenCalledTimes(1);
-      expect(onRecordingEnd).toHaveBeenCalledTimes(1);
+      const camera = await render(
+        <RNCamera
+          onRecordingStart={onRecordingStart}
+          onRecordingEnd={onRecordingEnd}
+        />,
+      );
+
+      camera.recordAsync();
     });
 
     it('should resolve to a RecordResponse', async () => {
-      const camera = await renderCamera();
-      setTimeout(() => camera.stopRecording(), 100);
+      const camera = await render(
+        <RNCamera onRecordingStart={() => camera.stopRecording()} />,
+      );
       const response = await camera.recordAsync();
 
       expect(response).toEqual({

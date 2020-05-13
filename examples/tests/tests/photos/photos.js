@@ -2,28 +2,19 @@
  * @format
  * @flow strict-local
  */
+
 import * as React from 'react';
 import {RNCamera} from 'react-native-camera';
 
 const waitFor = delay => new Promise(resolve => setTimeout(resolve, delay));
 
-export const photos = (tester, render) => {
-  const {describe, it, expect, createSpy, any, objectContaining} = tester;
-  const renderCamera = props =>
-    render({
-      Component: (
-        <RNCamera
-          type={RNCamera.Constants.Type.front}
-          style={{height: 100, width: 100}}
-          {...props}
-        />
-      ),
-      waitFor: 'onCameraReady',
-    });
-
+export const photos = (
+  {describe, it, expect, createSpy, any, objectContaining},
+  render,
+) => {
   describe('getAvailablePictureSizes', () => {
     it('should resolve to an array of strings', async () => {
-      const camera = await renderCamera();
+      const camera = await render(<RNCamera />);
       const ratios = await camera.getAvailablePictureSizes();
 
       expect(ratios).toBeInstanceOf(Array);
@@ -34,21 +25,21 @@ export const photos = (tester, render) => {
   describe('takePictureAsync', () => {
     it('should call onPictureTaken callback', async () => {
       const onPictureTaken = createSpy('onPictureTaken');
-      const camera = await renderCamera({onPictureTaken});
+      const camera = await render(<RNCamera onPictureTaken={onPictureTaken} />);
+      await waitFor(1000); // camera is still not ready? https://stackoverflow.com/a/40904906/7386122
       await camera.takePictureAsync();
-      await waitFor(500);
+      await waitFor(1000);
+
       expect(onPictureTaken).toHaveBeenCalledTimes(1);
     });
 
     it('should resolve to a TakePictureResponse', async () => {
-      const camera = await renderCamera();
+      const camera = await render(<RNCamera />);
+      await waitFor(1000); // camera is still not ready? https://stackoverflow.com/a/40904906/7386122
 
       const orientation = 1;
       const width = 100;
-      const response = await camera.takePictureAsync({
-        orientation,
-        width,
-      });
+      const response = await camera.takePictureAsync({orientation, width});
 
       expect(response).toEqual({
         width,
@@ -75,6 +66,6 @@ export const photos = (tester, render) => {
         base64: any(String),
         exif: objectContaining(additionalExif),
       });
-    });
+    }, 10000);
   });
 };

@@ -84,13 +84,6 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
                 loadBitmap();
                 mBitmap = squareBitmap(mBitmap, mOptions.getInt("squareSize"));
             }
-            
-            
-            if (mOptions.hasKey("width")) {
-                loadBitmap();
-                mBitmap = resizeBitmap(mBitmap, mOptions.getInt("width"));
-            }
-
 
             // Rotate the bitmap to the proper orientation if requested
             if(mOptions.hasKey("fixOrientation") && mOptions.getBoolean("fixOrientation")){
@@ -110,6 +103,12 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
             if (mOptions.hasKey("mirrorImage") && mOptions.getBoolean("mirrorImage")) {
                 loadBitmap();
                 mBitmap = flipHorizontally(mBitmap);
+            }
+            
+            
+            if (mOptions.hasKey("width")) {
+                loadBitmap();
+                mBitmap = resizeBitmap(mBitmap, mOptions.getInt("width"));
             }
 
             // EXIF code - we will adjust exif info later if we manipulated the bitmap

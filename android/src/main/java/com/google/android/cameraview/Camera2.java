@@ -44,6 +44,7 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
 
 import com.facebook.react.bridge.ReadableMap;
 
@@ -267,6 +268,8 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
 
     private Boolean mPlaySoundOnCapture = false;
 
+    private Boolean mPlaySoundOnRecord = false;
+
     private Surface mPreviewSurface;
 
     private Rect mInitialCropRegion;
@@ -373,6 +376,13 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
     @Override
     int getFacing() {
         return mFacing;
+    }
+
+    @Override
+    public ArrayList<int[]> getSupportedPreviewFpsRange() {
+        Log.e("CAMERA_2:: ", "getSupportedPreviewFpsRange is not currently supported for Camera2");
+        ArrayList<int[]> validValues = new ArrayList<int[]>();
+        return validValues;
     }
 
     @Override
@@ -562,7 +572,7 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
     }
 
     @Override
-    boolean record(String path, int maxDuration, int maxFileSize, boolean recordAudio, CamcorderProfile profile, int orientation) {
+    boolean record(String path, int maxDuration, int maxFileSize, boolean recordAudio, CamcorderProfile profile, int orientation, int fps) {
         if (!mIsRecording) {
             setUpMediaRecorder(path, maxDuration, maxFileSize, recordAudio, profile);
             try {
@@ -590,6 +600,9 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
                 // same TODO as onVideoRecorded
                 mCallback.onRecordingStart(mVideoPath, 0, 0);
 
+                if (mPlaySoundOnRecord) {
+                    sound.play(MediaActionSound.START_VIDEO_RECORDING);
+                }
                 return true;
             } catch (CameraAccessException | IOException e) {
                 e.printStackTrace();
@@ -610,6 +623,16 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
             }
             startCaptureSession();
         }
+    }
+
+    @Override
+    void pauseRecording() {
+        pauseMediaRecorder();
+    }
+
+    @Override
+    void resumeRecording() {
+        resumeMediaRecorder();
     }
 
     @Override
@@ -689,6 +712,16 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
     @Override
     public boolean getPlaySoundOnCapture(){
         return mPlaySoundOnCapture;
+    }
+
+    @Override
+    void setPlaySoundOnRecord(boolean playSoundOnRecord) {
+        mPlaySoundOnRecord = playSoundOnRecord;
+    }
+
+    @Override
+    boolean getPlaySoundOnRecord() {
+        return mPlaySoundOnRecord;
     }
 
     @Override
@@ -1410,6 +1443,9 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
         mMediaRecorder = null;
 
         mCallback.onRecordingEnd();
+        if (mPlaySoundOnRecord) {
+            sound.play(MediaActionSound.STOP_VIDEO_RECORDING);
+        }
 
         if (mVideoPath == null || !new File(mVideoPath).exists()) {
             // @TODO: implement videoOrientation and deviceOrientation calculation
@@ -1419,6 +1455,18 @@ class Camera2 extends CameraViewImpl implements MediaRecorder.OnInfoListener, Me
         // @TODO: implement videoOrientation and deviceOrientation calculation
         mCallback.onVideoRecorded(mVideoPath, 0, 0);
         mVideoPath = null;
+    }
+
+    private void pauseMediaRecorder() {
+        if (Build.VERSION.SDK_INT >= 24) {
+            mMediaRecorder.pause();
+        }
+    }
+
+    private void resumeMediaRecorder() {
+        if (Build.VERSION.SDK_INT >= 24) {
+            mMediaRecorder.resume();
+        }
     }
 
     /**
